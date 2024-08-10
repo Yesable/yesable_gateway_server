@@ -22,5 +22,5 @@ eureka:
     service-url:
       defaultZone: 
 ```
-위 yml파일은 해당 서버에서 security에 숨겨져 있습니다. 
+위 yml파일은 해당 서버에서 security에 숨겨져 있습니다. <BR>
 파일은 노션에 **application.yml 버전 관리** 에 들어가서 확인하세요.
