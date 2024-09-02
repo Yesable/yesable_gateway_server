@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "yesable.gateway.service.filter";
+option java_outer_classname = "AuthProto";
+
+service AuthService {
+  rpc CreateAuth(CreateTokenRequest) returns (CreateTokenResponse) {}
+  rpc VerifyAuth(VerifyTokenRequest) returns (VerifyTokenResponse) {}
+}
+
+message AuthData {
+  string id = 1;
+  string pw = 2;
+  string token = 3;
+  int64 createTime = 4;
+  int64 expireTime = 5;
+  UserType userType = 6;
+}
+
+message Verify {
+  ResponseType status = 1;
+  AuthData auth = 2;
+}
+
+enum UserType {
+  MEMBER = 0;
+  COMPANY = 1;
+}
+enum ResponseType {
+  SUCCESS = 0;
+  FAILED = 1;
+  EXPIRED_TIME = 2;
+}
+
+message CreateTokenRequest {
+  AuthData auth = 1;
+}
+
+message CreateTokenResponse {
+  AuthData auth = 1;
+}
+
+message VerifyTokenRequest {
+  string token = 1;
+}
+
+message VerifyTokenResponse {
+  Verify v = 1;
+}
