@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.loadbalancer.reactive.ReactiveLoadBalancer;
+import org.springframework.cloud.gateway.filter.GatewayFilter;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
-import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.loadbalancer.core.ReactorServiceInstanceLoadBalancer;
 import org.springframework.core.Ordered;
 import org.springframework.http.MediaType;
@@ -22,7 +22,7 @@ import java.util.Map;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class GrpcRequestConverterFilter implements GlobalFilter, Ordered {
+public class GrpcRequestConverterFilter implements GatewayFilter, Ordered {
 
     private final ReactiveLoadBalancer.Factory<ServiceInstance> loadBalancerFactory;
 
@@ -38,7 +38,15 @@ public class GrpcRequestConverterFilter implements GlobalFilter, Ordered {
                         return chain.filter(exchange);
                     }
 
-                    ManagedChannel channel = ManagedChannelBuilder.forAddress(instance.getHost(), 50022)
+                    Map<String, String> metadata = instance.getMetadata();
+                    String grpcPort = metadata.get("gRPC_port");
+
+                    if (grpcPort == null) {
+                        log.error("No gRPC port found in service instance metadata");
+                        return chain.filter(exchange);
+                    }
+
+                    ManagedChannel channel = ManagedChannelBuilder.forAddress(instance.getHost(), Integer.parseInt(grpcPort))
                             .usePlaintext()
                             .build();
 
@@ -46,7 +54,6 @@ public class GrpcRequestConverterFilter implements GlobalFilter, Ordered {
 
                     return Mono.create(sink -> {
                         if (path.contains("/auth-service/create-auth")) {
-                            // CreateAuth 요청 처리
                             AuthData authData = AuthData.newBuilder()
                                     .setId(queryParams.get("id"))
                                     .setPw(queryParams.get("pw"))
@@ -75,7 +82,6 @@ public class GrpcRequestConverterFilter implements GlobalFilter, Ordered {
                             stub.createAuth(request, responseObserver);
 
                         } else if (path.contains("/auth-service/verify-auth")) {
-                            // VerifyAuth 요청 처리
                             VerifyTokenRequest request = VerifyTokenRequest.newBuilder()
                                     .setToken(queryParams.get("token"))
                                     .build();
@@ -108,14 +114,14 @@ public class GrpcRequestConverterFilter implements GlobalFilter, Ordered {
                                 Mono.just(exchange.getResponse().bufferFactory().wrap((byte[]) responseBytes))
                         );
                     }).doFinally(signalType -> channel.shutdown());
-                })).onErrorResume(e -> {
-            // 예외 처리
+                })
+                .switchIfEmpty(chain.filter(exchange))
+        ).onErrorResume(e -> {
             log.error("Exception occurred during gRPC call", e);
             return chain.filter(exchange);
         });
     }
 
-    // 비동기적으로 ServiceInstance를 선택하는 메서드
     private Mono<ServiceInstance> chooseInstance(String serviceId) {
         ReactorServiceInstanceLoadBalancer loadBalancer = (ReactorServiceInstanceLoadBalancer) loadBalancerFactory.getInstance(serviceId);
         return Mono.defer(() -> loadBalancer.choose()
