@@ -1,0 +1,119 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "yesable.resume.module.service";
+option java_outer_classname = "OnboardingProto";
+
+service OnboardingService {
+  rpc CreateOnboarding(OnboardingRequest) returns (OnboardingResponse) {}
+  rpc UpdateOnboarding(OnboardingRequest) returns (OnboardingResponse) {}
+}
+
+message OnboardingData {
+  int64 userId = 1;
+  DisabilityType disabilityType = 2;
+  LocationType locationType = 3;
+  bool isTransit = 4;
+  repeated EmploymentHistoryData employmentHistoryDatas = 5;
+  repeated LicenseData licenseDatas = 6;
+  repeated AcademicData academicDatas = 7;
+  string supportRequirement = 8;
+  string selfIntroduction = 9;
+}
+
+enum DisabilityType {
+  PHYSICAL = 0;
+  SPEECH = 1;
+  VISUAL = 2;
+  HEARING = 3;
+  MENTAL = 4;
+  INTELLECTUAL = 5;
+  RESPIRATORY = 6;
+  HEART = 7;
+  FACE = 8;
+  LIVER = 9;
+  KIDNEY = 10;
+  BRAIN_LESION = 11;
+  AUTISTIC = 12;
+  STOMA = 13;
+}
+
+enum LocationType {
+  ALL = 0;
+  SEOUL = 1;
+  GYEONGGI = 2;
+  INCHEON = 3;
+  DAEJEON = 4;
+  SEJONG = 5;
+  CHUNGNAM = 6;
+  CHUNGBOOK = 7;
+  GWANGJU = 8;
+  JEONNAM = 9;
+  JEONBOOK = 10;
+  DAEGU = 11;
+  GYEONGBUK = 12;
+  BUSAN = 13;
+  ULSAN = 14;
+  GYOENGNAM = 15;
+  GANGWON = 16;
+  JEJU = 17;
+}
+
+enum EmploymentType {
+  IT = 0;
+  SERVICE = 1;
+  MARKETING = 2;
+  PRODUCTION = 3;
+  EDUCATION = 4;
+  OFFICE = 5;
+  CONSULTATION = 6;
+  FOOD = 7;
+  HEALTH = 8;
+  DESIGN = 9;
+  ACCOUNTANCY = 10;
+  MUSIC = 11;
+  WELFARE = 12;
+}
+
+message EmploymentHistoryData {
+  string corporateName = 1;
+  string startDate = 2;
+  string endDate = 3;
+  bool isEmployed = 4;
+  string duty = 5;
+  string jobDescription = 6;
+}
+
+message LicenseData {
+  string licenseName = 1;
+  string licenseInstitution = 2;
+  int64 acquisitionYear = 3;
+}
+
+message AcademicData {
+  EnrollmentType enrollmentType = 1;
+  AcademicType academicType = 2;
+  string schoolName = 3;
+  string major = 4;
+  string entranceDate = 5;
+  string graduateDate = 6;
+}
+
+enum EnrollmentType {
+  ENROLL = 0;
+  ABSENCE = 1;
+  GRADUATE = 2;
+}
+
+enum AcademicType {
+  BACHELOR = 0;
+  MASTER = 1;
+  DOCTER = 2;
+}
+message OnboardingRequest {
+  OnboardingData onboarding = 1;
+}
+
+message OnboardingResponse {
+  OnboardingData onboarding = 1;
+}

@@ -15,22 +15,26 @@ import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.MonoSink;
+import yesable.auth.module.service.*;
 import yesable.gateway.constant.ConverterConstants;
-import yesable.gateway.service.filter.*;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class GrpcRequestConverterFilter implements GatewayFilter, Ordered {
+public class GrpcAuthRequestConverterFilter implements GatewayFilter, Ordered {
 
     private final ConverterConstants converterConstants;
     private final Map<String, ManagedChannel> channelMap = new ConcurrentHashMap<>();
     private final Map<String, AuthServiceGrpc.AuthServiceStub> stubMap = new ConcurrentHashMap<>();
+
+    // JSON 변환기 캐싱
+    private static final JsonFormat.Printer JSON_PRINTER = JsonFormat.printer();
 
     @PreDestroy
     public void shutdown() {
@@ -78,35 +82,31 @@ public class GrpcRequestConverterFilter implements GatewayFilter, Ordered {
     }
 
     private Mono<byte[]> makeGrpcCall(String path, Map<String, String> queryParams, AuthServiceGrpc.AuthServiceStub stub) {
-        if (path.contains("/auth-service/create-auth")) {
-            AuthData authData = AuthData.newBuilder()
-                    .setId(queryParams.get("id"))
-                    .setPw(queryParams.get("pw"))
-                    .build();
-            CreateTokenRequest request = CreateTokenRequest.newBuilder()
-                    .setAuth(authData)
-                    .build();
+        return Mono.fromCallable(() -> {
+            if (path.contains("/auth/create")) {
+                Login login = Login.newBuilder()
+                        .setAccount(AccountData.newBuilder()
+                                .setId(queryParams.get("id"))
+                                .setPw(queryParams.get("pw"))
+                                .build())
+                        .build();
+                CreateTokenRequest request = CreateTokenRequest.newBuilder()
+                        .setLogin(login)
+                        .build();
 
-            return callCreateAuth(request, stub);
+                return callCreateAuth(request, stub).block(); // 비동기 블록 대체
 
-        } else if (path.contains("/auth-service/verify-auth")) {
-            VerifyTokenRequest request = VerifyTokenRequest.newBuilder()
-                    .setToken(queryParams.get("token"))
-                    .build();
-
-            return callVerifyAuth(request, stub);
-
-        } else {
-            return Mono.just(new byte[0]);
-        }
+            }
+            return new byte[0];
+        });
     }
 
     private Mono<byte[]> callCreateAuth(CreateTokenRequest request, AuthServiceGrpc.AuthServiceStub stub) {
-        return Mono.create(sink -> stub.createAuth(request, new SimpleStreamObserver<>(sink)));
-    }
-
-    private Mono<byte[]> callVerifyAuth(VerifyTokenRequest request, AuthServiceGrpc.AuthServiceStub stub) {
-        return Mono.create(sink -> stub.verifyAuth(request, new SimpleStreamObserver<>(sink)));
+        return Mono.fromCallable(() -> {
+            SimpleStreamObserver<CreateTokenResponse> observer = new SimpleStreamObserver<>();
+            stub.createAuth(request, observer);
+            return observer.getResponse(); // 응답 데이터 바로 반환
+        });
     }
 
     @Override
@@ -114,25 +114,35 @@ public class GrpcRequestConverterFilter implements GatewayFilter, Ordered {
         return -2;
     }
 
-    private record SimpleStreamObserver<T extends Message>(MonoSink<byte[]> sink) implements StreamObserver<T> {
+    private static class SimpleStreamObserver<T extends Message> implements StreamObserver<T> {
 
-        @Override
-            public void onNext(T response) {
-                try {
-                    String jsonResponse = JsonFormat.printer().print(response);
-                    sink.success(jsonResponse.getBytes(StandardCharsets.UTF_8));
-                } catch (Exception e) {
-                    sink.error(e);
-                }
-            }
+        private final CompletableFuture<byte[]> future = new CompletableFuture<>();
 
-            @Override
-            public void onError(Throwable t) {
-                sink.error(t);
-            }
-
-            @Override
-            public void onCompleted() {
+        public byte[] getResponse() {
+            try {
+                return future.get(); // 결과값을 동기식으로 반환
+            } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException(e);
             }
         }
+
+        @Override
+        public void onNext(T response) {
+            try {
+                String jsonResponse = JSON_PRINTER.print(response);
+                future.complete(jsonResponse.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                future.completeExceptionally(e);
+            }
+        }
+
+        @Override
+        public void onError(Throwable t) {
+            future.completeExceptionally(t);
+        }
+
+        @Override
+        public void onCompleted() {
+        }
+    }
 }

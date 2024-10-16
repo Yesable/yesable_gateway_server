@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 option java_multiple_files = true;
-option java_package = "yesable.gateway.service.filter";
+option java_package = "yesable.auth.module.service";
 option java_outer_classname = "AuthProto";
 
 service AuthService {
@@ -10,12 +10,20 @@ service AuthService {
 }
 
 message AuthData {
-  string id = 1;
-  string pw = 2;
+  string userId = 1;
   string token = 3;
   int64 createTime = 4;
   int64 expireTime = 5;
   UserType userType = 6;
+}
+
+message AccountData {
+  string id = 1;
+  string pw = 2;
+}
+
+message Login {
+  AccountData account = 1;
 }
 
 message Verify {
@@ -34,7 +42,7 @@ enum ResponseType {
 }
 
 message CreateTokenRequest {
-  AuthData auth = 1;
+  Login login = 1;
 }
 
 message CreateTokenResponse {
