@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "yesable.recruit.module.service";
+option java_outer_classname = "RecruitProto";
+option objc_class_prefix = "RC";
+
+package recruit;
+
+service RecruitService {
+  rpc GetRecruitDetail(GetRecruitRequest) returns (RecruitResponse);
+  rpc GetRecruitsByFilter(RecruitFilterRequest) returns (RecruitListResponse);
+  rpc GetResumeForm(GetResumeFormRequest) returns (ResumeFormResponse);
+}
+
+message GetRecruitRequest {
+  string recruitId = 1;
+}
+
+message GetResumeFormRequest {
+  string recruitId = 1;
+}
+
+message RecruitResponse {
+  RecruitData recruit = 1;
+}
+
+message ResumeFormResponse {
+  ResumeFormData resumeForm = 1;
+}
+
+message RecruitListResponse {
+  repeated RecruitData recruits = 1;
+}
+
+message RecruitFilterRequest {
+  string employmentForm = 1;
+  string disabilityDegree = 2;
+  string scholarship = 3;
+  string career = 4;
+}
+
+message RecruitData {
+  string recruitId = 1;
+  string logoImageUrl = 2;
+  int32 salary = 3;
+  string startTime = 4;
+  string endTime = 5;
+  string workPlace = 6;
+  string employmentForm = 7;
+  string disabilityDegree = 8;
+  string workType = 9;
+  string assignedTask = 10;
+  string welfare = 11;
+  int32 recruitNumber = 12;
+  string career = 13;
+  string scholarship = 14;
+  string preference = 15;
+  string recruitImageUrl = 16;
+  string recruitStartDate = 17;
+  string recruitEndDate = 18;
+  string submission = 19;
+  string responsibilityName = 20;
+  string contactus = 21;
+  string email = 22;
+  string homepage = 23;
+  string companyName = 24;
+  string exponentName = 25;
+  string workEnvironment = 26;
+  string businessAddress = 27;
+}
+
+message ResumeFormData {
+  string goodFit = 1;
+  map<string, string> questions = 2;
+}

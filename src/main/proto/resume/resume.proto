@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "yesable.resume.module.service";
+option java_outer_classname = "ResumseProto";
+
+service ResumeService {
+  rpc CreateResume(ResumeCreateRequest) returns (ResumeResponse) {}
+  rpc UpdateResume(ResumeUpdateRequest) returns (ResumeResponse) {}
+  rpc DownloadResumeRdf(ResumeDownloadRequest) returns (ResumeDownloadResponse) {}
+}
+message ResumeData {
+  int64 userId = 1;
+  string resumeName = 2;
+  bool experienced = 3;
+  string workExperience = 4;
+  repeated QuestionData questionDatas = 5;
+}
+
+message QuestionData {
+  string question = 1;
+  string answer = 2;
+}
+
+message ResumeCreateRequest {
+  ResumeData resume = 1;
+}
+
+message ResumeUpdateRequest {
+  int64 resumeId = 1;
+  ResumeData resume = 2;
+}
+
+message ResumeResponse {
+  int64 resumeId = 1;
+  ResumeData resume = 2;
+}
+
+message ResumeDownloadRequest {
+  int64 resumeId = 1;
+}
+
+message ResumeDownloadResponse {
+  bytes pdfData = 1;
+  string errorMessage = 2;
+}

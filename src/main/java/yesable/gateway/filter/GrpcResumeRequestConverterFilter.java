@@ -34,7 +34,9 @@ public class GrpcResumeRequestConverterFilter implements GatewayFilter, Ordered 
 
     private final ConverterConstants converterConstants;
     private final Map<String, ManagedChannel> channelMap = new ConcurrentHashMap<>();
-    private final Map<String, OnboardingServiceGrpc.OnboardingServiceStub> stubMap = new ConcurrentHashMap<>();
+    private final Map<String, OnboardingServiceGrpc.OnboardingServiceStub> onboardingStubMap = new ConcurrentHashMap<>();
+    private final Map<String, ResumeServiceGrpc.ResumeServiceStub> resumeStubMap = new ConcurrentHashMap<>();
+
 
     // JSON 변환기 캐싱
     private static final JsonFormat.Printer JSON_PRINTER = JsonFormat.printer();
@@ -62,21 +64,40 @@ public class GrpcResumeRequestConverterFilter implements GatewayFilter, Ordered 
                     }
 
                     String instanceKey = instance.getHost() + ":" + instance.getPort();
-                    OnboardingServiceGrpc.OnboardingServiceStub stub = stubMap.computeIfAbsent(instanceKey, key -> {
-                        ManagedChannel channel = ManagedChannelBuilder.forAddress(instance.getHost(), Integer.parseInt(instance.getMetadata().get("gRPC_port")))
-                                .usePlaintext()
-                                .build();
-                        channelMap.put(instanceKey, channel);
-                        return OnboardingServiceGrpc.newStub(channel);
-                    });
+                    if (path.contains("/resume/onboarding")) {
+                        OnboardingServiceGrpc.OnboardingServiceStub onboardingStub = onboardingStubMap.computeIfAbsent(instanceKey, key -> {
+                            ManagedChannel channel = ManagedChannelBuilder.forAddress(instance.getHost(), Integer.parseInt(instance.getMetadata().get("gRPC_port")))
+                                    .usePlaintext()
+                                    .build();
+                            channelMap.put(instanceKey, channel);
+                            return OnboardingServiceGrpc.newStub(channel);
+                        });
 
-                    return makeGrpcCall(userId, path, queryParams, stub)
-                            .flatMap(responseBytes -> {
-                                exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-                                return exchange.getResponse().writeWith(
-                                        Mono.just(exchange.getResponse().bufferFactory().wrap(responseBytes))
-                                );
-                            });
+                        return makeGrpcCallForOnboarding(userId, path, queryParams, onboardingStub)
+                                .flatMap(responseBytes -> {
+                                    exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                                    return exchange.getResponse().writeWith(
+                                            Mono.just(exchange.getResponse().bufferFactory().wrap(responseBytes))
+                                    );
+                                });
+
+                    } else {
+                        ResumeServiceGrpc.ResumeServiceStub resumeStub = resumeStubMap.computeIfAbsent(instanceKey, key -> {
+                            ManagedChannel channel = ManagedChannelBuilder.forAddress(instance.getHost(), Integer.parseInt(instance.getMetadata().get("gRPC_port")))
+                                    .usePlaintext()
+                                    .build();
+                            channelMap.put(instanceKey, channel);
+                            return ResumeServiceGrpc.newStub(channel);
+                        });
+
+                        return makeGrpcCallForResume(userId, path, queryParams, resumeStub)
+                                .flatMap(responseBytes -> {
+                                    exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
+                                    return exchange.getResponse().writeWith(
+                                            Mono.just(exchange.getResponse().bufferFactory().wrap(responseBytes))
+                                    );
+                                });
+                    }
                 })
                 .switchIfEmpty(chain.filter(exchange))
                 .onErrorResume(e -> {
@@ -85,7 +106,8 @@ public class GrpcResumeRequestConverterFilter implements GatewayFilter, Ordered 
                 });
     }
 
-    private Mono<byte[]> makeGrpcCall(String userId, String path, Map<String, String> queryParams, OnboardingServiceGrpc.OnboardingServiceStub stub) {
+
+    private Mono<byte[]> makeGrpcCallForOnboarding(String userId, String path, Map<String, String> queryParams, OnboardingServiceGrpc.OnboardingServiceStub stub) {
 
         return Mono.fromCallable(() -> {
             if (path.contains("/resume/onboarding")) {
@@ -174,6 +196,76 @@ public class GrpcResumeRequestConverterFilter implements GatewayFilter, Ordered 
             SimpleStreamObserver<OnboardingResponse> observer = new SimpleStreamObserver<>();
             stub.createOnboarding(request, observer);
             return observer.getResponse(); // 응답 데이터 바로 반환
+        });
+    }
+
+    private Mono<byte[]> makeGrpcCallForResume(String userId, String path, Map<String, String> queryParams, ResumeServiceGrpc.ResumeServiceStub stub) {
+        return Mono.fromCallable(() -> {
+            if (path.contains("/resume/create")) {
+                ResumeData resumeData = buildResumeDataFromQueryParams(queryParams);
+                ResumeCreateRequest request = ResumeCreateRequest.newBuilder()
+                        .setResume(resumeData)
+                        .build();
+                return callCreateResume(request, stub).block();
+            } else if (path.contains("/resume/update")) {
+                ResumeData resumeData = buildResumeDataFromQueryParams(queryParams);
+                ResumeUpdateRequest request = ResumeUpdateRequest.newBuilder()
+                        .setResumeId(Long.parseLong(queryParams.get("resumeId")))
+                        .setResume(resumeData)
+                        .build();
+                return callUpdateResume(request, stub).block();
+            } else if (path.contains("/resume/download")) {
+                ResumeDownloadRequest request = ResumeDownloadRequest.newBuilder()
+                        .setResumeId(Long.parseLong(queryParams.get("resumeId")))
+                        .build();
+                return callDownloadResume(request, stub).block();
+            }
+            return new byte[0];
+        });
+    }
+
+    private ResumeData buildResumeDataFromQueryParams(Map<String, String> queryParams) {
+        List<QuestionData> questionDataList = Arrays.stream(queryParams.get("questions").split(","))
+                .map(questionStr -> {
+                    String[] fields = questionStr.split(";");
+                    return QuestionData.newBuilder()
+                            .setQuestion(fields[0])
+                            .setAnswer(fields[1])
+                            .build();
+                })
+                .collect(Collectors.toList());
+
+        return ResumeData.newBuilder()
+                .setUserId(Long.parseLong(queryParams.get("userId")))
+                .setResumeName(queryParams.get("resumeName"))
+                .setExperienced(Boolean.parseBoolean(queryParams.get("experienced")))
+                .setWorkExperience(queryParams.get("workExperience"))
+                .addAllQuestionDatas(questionDataList)
+                .build();
+    }
+
+
+    private Mono<byte[]> callCreateResume(ResumeCreateRequest request, ResumeServiceGrpc.ResumeServiceStub stub) {
+        return Mono.fromCallable(() -> {
+            SimpleStreamObserver<ResumeResponse> observer = new SimpleStreamObserver<>();
+            stub.createResume(request, observer);
+            return observer.getResponse();
+        });
+    }
+
+    private Mono<byte[]> callUpdateResume(ResumeUpdateRequest request, ResumeServiceGrpc.ResumeServiceStub stub) {
+        return Mono.fromCallable(() -> {
+            SimpleStreamObserver<ResumeResponse> observer = new SimpleStreamObserver<>();
+            stub.updateResume(request, observer);
+            return observer.getResponse();
+        });
+    }
+
+    private Mono<byte[]> callDownloadResume(ResumeDownloadRequest request, ResumeServiceGrpc.ResumeServiceStub stub) {
+        return Mono.fromCallable(() -> {
+            SimpleStreamObserver<ResumeDownloadResponse> observer = new SimpleStreamObserver<>();
+            stub.downloadResumeRdf(request, observer);
+            return observer.getResponse();
         });
     }
 

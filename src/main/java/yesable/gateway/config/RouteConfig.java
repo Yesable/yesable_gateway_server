@@ -6,6 +6,7 @@ import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import yesable.gateway.filter.GrpcAuthRequestConverterFilter;
+import yesable.gateway.filter.GrpcRecruitRequestConverterFilter;
 import yesable.gateway.filter.GrpcResumeRequestConverterFilter;
 
 @Configuration
@@ -14,7 +15,7 @@ public class RouteConfig {
 
     private final GrpcAuthRequestConverterFilter grpcAuthRequestConverterFilter;
     private final GrpcResumeRequestConverterFilter grpcResumeRequestConverterFilter;
-
+    private final GrpcRecruitRequestConverterFilter grpcRecruitRequestConverterFilter;
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
@@ -36,6 +37,12 @@ public class RouteConfig {
                             return f;
                         })
                         .uri("lb://RESUME-SERVICE"))
+                .route("recruit-service", r -> r.path("/recruit/**")
+                        .filters(f -> {
+                            f.filter(grpcRecruitRequestConverterFilter);
+                            return f;
+                        })
+                        .uri("lb://RECRUIT-SERVICE"))
                 .build();
     }
 }
